@@ -14,10 +14,10 @@ resource "aws_s3_bucket" "bucket_data" {
 }
 
 resource "aws_s3_bucket_object" "data_files" {
-  for_each = fileset("data/", "*")
+  for_each = fileset("../../../data/", "*")
   bucket     = aws_s3_bucket.bucket_data.id
   key = each.value
-  source     = "data/${each.value}"
+  source     = "../../../data/${each.value}"
   depends_on = [aws_s3_bucket.bucket_data]
 }
 

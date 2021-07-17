@@ -21,7 +21,8 @@ def flatten(_2d_list):
 # TODO: SparkSession and SparkContext
 # spark = SparkSession.builder.appName('inverted_index').getOrCreate()
 
-# TODO: connect to S3: https://stackoverflow.com/questions/33378422/how-to-choose-an-aws-profile-when-using-boto3-to-connect-to-cloudfront
+# TODO: connect to AWS from Spark - now bucket created is public, which is bad, of course:
+# https://stackoverflow.com/questions/29443911/locally-reading-s3-files-through-spark-or-better-pyspark
 input_bucket = 's3://pyspark-test-vlad/'
 input_path = '/*.txt'
 
