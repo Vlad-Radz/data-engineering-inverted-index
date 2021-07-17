@@ -41,7 +41,6 @@ resource "aws_emr_cluster" "emr-spark-cluster" {
   }
 
   service_role     = "${var.emr_service_role}"
-  # autoscaling_role = "${var.emr_autoscaling_role}"
 /*
   bootstrap_action {
     name = "Bootstrap setup."
