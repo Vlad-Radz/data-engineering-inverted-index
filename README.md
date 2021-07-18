@@ -31,15 +31,22 @@ How to connect to S3 from local? So that it also works from Docker and EMR noteb
 
 Wrote by myself except 1 module (IAM)
 
-Works, but can't submit pyspark job, and didn't want to waste time - shouldn't be perfect.
-Also create notebooks (I know that Jupyter Notebook is bad for the described task of indexing, and regular automated reindexing, but for quick demo would be OK) is not possible in Terraform.
+Cluster works, but:
+1. can't submit pyspark job, and didn't want to waste time - shouldn't be perfect.
+2. Also create notebooks (I know that Jupyter Notebook is bad for the described task of indexing, and regular automated reindexing, but for quick demo would be OK) is not possible in Terraform.
+3. Jupyter Entreprise Gateway should be there to create notebooks manually
+4. Bootstrapping can't start:
+- https://stackoverflow.com/questions/62983941/install-boto3-aws-emr-failed-attempting-to-download-bootstrap-action
+- https://forums.aws.amazon.com/thread.jspa?threadID=164769
 
 What does terraform create?
 
-- ```cd terraform\deployment\computation```
+- ```cd terraform\deployment\emr_based```
 - ```terraform plan -out="../../tfplan" -var-file="variables.tfvars"```
 - ```terraform apply -var-file="variables.tfvars"```
 - ```aws-vault exec nc-account -- terraform destroy -var-file="variables.tfvars"```
+
+variables.tfvars - replace vars
 
 ## 2nd version: Docker
 
@@ -58,14 +65,13 @@ Integration:
 
 
 # Next steps:
-1. write code for connecting to S3
 2. add context and session for Spark
 3. Test it on EMR
-4. Write Dockerfile, mount directory, test if works
-    4.1. If not - maybe because of networking. Debug
-5. If doesn't work for more than 1 hour: moto. I think, that should be possible. Potential complexity: use moto from a Docker container
-6. If Docker doesn't work, then manual creation of notebooks -> deploy EMR etc. with Terraform and test if you can create notebooks in the console
+6. Our deployment: manual creation of notebooks -> deploy EMR etc. with Terraform and test if you can create notebooks in the console
 7. Document all of this
+8. Also document:
+    - Dockerfile, mount directory, test if works
+    - moto. I think, that should be possible. Potential complexity: use moto from a Docker container
 8. Document Redis, hashmap, search, ordered sets; also describe that sets etc. could also be used in this strategy
 9. Refactor code
 10. Write a couple of cases with `Pytest`

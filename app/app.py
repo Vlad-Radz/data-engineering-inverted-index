@@ -1,5 +1,6 @@
 
 from pyspark.sql import functions as F
+from pyspark.sql import SparkSession
 
 
 def flatten(_2d_list):
@@ -18,10 +19,13 @@ def flatten(_2d_list):
     return flat_list
 
 
-# TODO: SparkSession and SparkContext
-# spark = SparkSession.builder.appName('inverted_index').getOrCreate()
+spark = SparkSession\
+    .builder\
+    .appName("Builder of inverted index")\
+    .getOrCreate()
+    # if config is needed: .config("spark.some.config.option", "some-value")\
 
-# TODO: connect to AWS from Spark - now bucket created is public, which is bad, of course:
+# TODO: connect to AWS from Spark, so that this script can work not only from a Notebook in AWS EMR, but also from Docker or locally:
 # https://stackoverflow.com/questions/29443911/locally-reading-s3-files-through-spark-or-better-pyspark
 input_bucket = 's3://pyspark-test-vlad/'
 input_path = '/*.txt'

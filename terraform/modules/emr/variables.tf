@@ -19,3 +19,5 @@ variable "emr_service_role" {}
 
 variable "bucket_scripts_name" {}
 variable "bucket_logs_name" {}
+
+variable "subnet_id" {}

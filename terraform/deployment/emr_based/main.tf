@@ -14,10 +14,17 @@ module "emr" {
   emr_service_role          = "${module.iam.emr_service_role}"
   bucket_scripts_name       = "${module.s3.bucket_scripts_name}"
   bucket_logs_name          = "${module.s3.bucket_logs_name}"
+  subnet_id                 = "${module.network.subnet_id}"
 }
 
 module "iam" {
   source = "../../modules/iam"
+}
+
+module "network" {
+  source = "../../modules/network"
+
+  aws_region                      = "${var.aws_region}"
 }
 
 module "s3" {

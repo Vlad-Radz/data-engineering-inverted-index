@@ -7,7 +7,7 @@ resource "aws_emr_cluster" "emr-spark-cluster" {
   log_uri                           = "s3://${var.bucket_logs_name}/"
 
   ec2_attributes {
-    # subnet_id                         = "${var.subnet_id}"
+    subnet_id                         = "${var.subnet_id}"
     key_name                          = "${var.key_name}"
     # emr_managed_master_security_group = "${var.emr_master_security_group}"
     # emr_managed_slave_security_group  = "${var.emr_slave_security_group}"
@@ -41,12 +41,11 @@ resource "aws_emr_cluster" "emr-spark-cluster" {
   }
 
   service_role     = "${var.emr_service_role}"
-/*
+
   bootstrap_action {
     name = "Bootstrap setup."
     path = "s3://${var.bucket_scripts_name}/scripts/bootstrap_actions.sh"
   }
-*/
 
   step {
       name              = "Calculate inverted index"
