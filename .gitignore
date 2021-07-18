@@ -1,4 +1,4 @@
 # terraform modules, states and plan
 **/terraform.tfstate.*.backup
-**/.terraform
+**/.terraform/
 **/tfplan
