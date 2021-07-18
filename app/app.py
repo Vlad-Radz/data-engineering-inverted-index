@@ -1,13 +1,14 @@
 
 from pyspark.sql import functions as F
-from pyspark.sql import SparkSession
+from pyspark.context import SparkContext
 
 
-def flatten(_2d_list):
+def flatten(a_list):
+    # TODO: refactor function - is ugly
     flat_list = []
     # Iterate through the outer list
-    if type(_2d_list) is list:
-        for element in _2d_list:
+    if type(a_list) is list:
+        for element in a_list:
             if type(element) is list:
                 # If the element is of type list, iterate through the sublist
                 for item in element:
@@ -15,25 +16,23 @@ def flatten(_2d_list):
             else:
                 flat_list.append(element)
     else:
-        flat_list.append(_2d_list)
+        flat_list.append(a_list)
     return flat_list
 
-
-spark = SparkSession\
-    .builder\
-    .appName("Builder of inverted index")\
-    .getOrCreate()
-    # if config is needed: .config("spark.some.config.option", "some-value")\
+sc = SparkContext('local', 'inverted_index')
 
 # TODO: connect to AWS from Spark, so that this script can work not only from a Notebook in AWS EMR, but also from Docker or locally:
 # https://stackoverflow.com/questions/29443911/locally-reading-s3-files-through-spark-or-better-pyspark
-input_bucket = 's3://pyspark-test-vlad/'
+
+# input_bucket = 's3://pyspark-test-vlad/'
+input_bucket = 'file:///words_index/'
 input_path = '/*.txt'
 
 # TODO: partition by letter - less shuffling (right?)
 # TODO: no need to parallelize - or?
 
 rdd_files_contents = sc.wholeTextFiles(input_bucket)
+
 rdd_words = rdd_files_contents.\
                 mapValues(lambda k: k.split("\n")).\
                 flatMap(lambda x: [(x[0], w) for w in x[1]]).\
@@ -42,9 +41,11 @@ rdd_words = rdd_files_contents.\
                 map(lambda x: (x[0], flatten(x[1]))).\
                 map(lambda x: (x[0], flatten(x[1]))).\
                 map(lambda x: (x[0], flatten(x[1]))).\
-                map(lambda x: (x[0], [n.split("/")[3] for n in x[1]]))
+                map(lambda x: (x[0], [n.split("/")[2] for n in x[1]]))
 
 # TODO: dirty hack: flattening needs to be done 3x - function needs to be adjusted
 
-for x in rdd_words.collect():
+for i, x in enumerate(rdd_words.collect()):
     print(x)
+    #if i == 10:
+    #    break

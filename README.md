@@ -9,7 +9,9 @@
 ```conda install --file requirements.txt```
 ```python ./app/app.py```
 
-# Code design
+# Solution
+
+## Code design
 
 facades for systems like Spark, Redis + hashmap
 
@@ -20,6 +22,41 @@ Strategy pattern
 - https://stackoverflow.com/questions/616796/what-is-the-difference-between-factory-and-strategy-patterns
 
 How to connect to S3 from local? So that it also works from Docker and EMR notebook? --> boto not needed. Bucket needs to made public
+
+## Results:
+
+```
+('eyebrow', ['vocab.nytimes.txt', 'vocab.enron.txt'])
+('eyed', ['vocab.nytimes.txt', 'vocab.enron.txt'])
+('eyedrop', ['vocab.nytimes.txt'])
+('eyeful', ['vocab.nytimes.txt'])
+('eyeglass', ['vocab.nytimes.txt'])
+('eyeglasses', ['vocab.nytimes.txt'])
+('eyeing', ['vocab.nytimes.txt', 'vocab.enron.txt'])
+('eyelash', ['vocab.nytimes.txt'])
+('eyelashes', ['vocab.nytimes.txt'])
+('eyelet', ['vocab.nytimes.txt'])
+('eyelid', ['vocab.nytimes.txt'])
+('eyeliner', ['vocab.nytimes.txt'])
+('eyewear', ['vocab.nytimes.txt'])
+('eyewitness', ['vocab.nytimes.txt', 'vocab.enron.txt'])
+('eyewitnesses', ['vocab.nytimes.txt'])
+('eying', ['vocab.nytimes.txt'])
+('eyre', ['vocab.nytimes.txt'])
+('f22', ['vocab.nytimes.txt'])
+('fab', ['vocab.nytimes.txt'])
+('fable', ['vocab.nytimes.txt'])
+('fabricated', ['vocab.nytimes.txt', 'vocab.nips.txt'])
+('fabricating', ['vocab.nytimes.txt'])
+('fabrication', ['vocab.nytimes.txt', 'vocab.enron.txt', 'vocab.nips.txt'])
+('fabricator', ['vocab.nytimes.txt', 'vocab.enron.txt'])
+('fabulous', ['vocab.nytimes.txt', 'vocab.enron.txt'])
+('fabulously', ['vocab.nytimes.txt'])
+('fabulousness', ['vocab.nytimes.txt'])
+('facade', ['vocab.nytimes.txt'])
+('facetiously', ['vocab.nytimes.txt'])
+('facial', ['vocab.nytimes.txt', 'vocab.enron.txt', 'vocab.nips.txt'])
+```
 
 ## Known bugs
 
@@ -49,6 +86,9 @@ What does terraform create?
 variables.tfvars - replace vars
 
 ## 2nd version: Docker
+
+- ```docker build -t pyspark --build-arg PYTHON_VERSION=3.8 --build-arg IMAGE=buster .```
+- ```docker run -it pyspark```
 
 # Testing strategies
 
