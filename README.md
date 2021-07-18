@@ -1,19 +1,79 @@
+# What is this project about
 
+This project is about applying various concepts from data engineering world. The task sounds like follows:
 
-# Dependencies management
-```conda create -n dataeng python=3.8```
-```conda activate dataeng```
-```pip install pyspark```
-```conda list``` - to check
+__Prerequisites__:
+1. Large collection of files in `AWS S3` or `GCP` object storage.
+2. Each file has a set of words in it.
+3. Each file is named after its order in the large collection, e.g. `2.txt`, or `3.txt`.
 
-```conda install --file requirements.txt```
-```python ./app/app.py```
+__Goals__:
+1. An inverted index should be build:
+    - Create a dictionary that matches each word from all of the files to a unique ID.
+    - Create a dictionary that matches each file to a unique ID (should be the name of the file)
+    - Bring words and origin files together. E.g.: `{127: [1, 6, 938]}`
+    - Sort those pairs by word ID and file ID.
+    - Final step: inverted index, that gives for each word the file names of where it appears.
+2. The solution should scale and perform well on a large set of files.
+3. Solution should be deployed in a public cloud.
+
+__Additional considerations__:
+1. Rebuild of the index should be triggered on regular basis (let's say, every night). Which means, new data should come into the object storage, and we need a mechanism to recognise the delta.
+2. Solution should be ideally serverless.
 
 # Solution
 
+## Technology decisions
+I chose `PySpark` for computation of inverted index, because the solution should scale well, and a distributed computation framework is an ideal candidate for such a task.
+
+Since the solution should ideally be serverless, I tried to deploy my solution in an `AWS EMR` ("Elastic Map Reduce") cluster, which is a managed Hadoop / Spark environment, but I had problems, which I wull described in a diff. section below.
+
+`Terraform` was chosen as infra-as-a-code solution, because of some familiarity and popularity in the community.
+
+## My focus, and what I had to ignore (no IDs instead of words, no testing and more)
+
+The task sounds pretty simple, but if you want to do in short time, you need to concentrate on some things and compromise some others.
+
+My compromises (reason for all of them - __time shortage__):
+- Severe:
+    - I didn't create dictionary, which would map words to IDs. But __how would I implement it__: I would use a sorted set as data structure, which words are appended to; since a set can't have duplicates, the words which were already indexed at least once, will keep their IDs, and thanks to sorting new words will get correct positional IDs. The set can be stored in an object storage like `S3` or in the `Redis` database. 
+    - I left the original file names, and didn't rename them into ID-like names.
+    - The result is not stored anywhere - is just an output in the console. You can also see a snippet in this `README` file (below).
+- Nice to have:
+    - Scheduling and reindexing is missing
+    - no automated tests written. If I would have tested my solution, I would have done it with `pytest` for unit and integration tests. `moto` could be used for mocking `AWS` services. `pytest` and `moto` integrate seemlessly. Also `minio` could be used as a local S3-API-compatible object storage for integration testing.
+
+What did I focus on:
+- scalability of solution --> `PySpark` as technology of choice
+- good documentation and description of choices --> `README.md` file with detailed description
+- clean setup of infrastructure --> working `terraform` code base
+- well structured and designed code --> `Strategy` pattern, dependency injection and other patterns
+- Real-world data --> I found files, which are really used in the research (taken from here: https://archive.ics.uci.edu/ml/datasets/bag+of+words):
+    - Enron Emails (`vocab.enron.txt`)
+    - NIPS full papers (`vocab.nips.txt`)
+    - NYTimes news articles (`vocab.nytimes.txt`)
+    - dailykos.com blog entries (`vocab.kos.txt`)
+
+## Overall logic of the solution
+
+### Current implementation: distributed computing framework
+
+### Possible implementation: leverage bitmaps
+
+-----------------------------------------------------------------------
+
+## Dependencies management
+Right now the dependencies management is not needed, because the only dependecy of Python used is `pyspark`. In the future I would use `miniconda` with the following commands:
+- To create a virtual environment: ```conda create -n dataeng python=3.8```
+- Activate the virtual environment we created in the last step```conda activate dataeng```
+- Install needed dependencies in the activated virtual environment:
+    - Option 1: ```pip install pyspark```
+    - Option 2: ```conda install --file requirements.txt```
+- Check the installations: ```conda list```.
+
 ## Code design
 
-facades for systems like Spark, Redis + hashmap
+facades for systems like Spark, Redis + bitmaps
 
 in ABC there is always storage and transformation logic
 
@@ -60,11 +120,11 @@ How to connect to S3 from local? So that it also works from Docker and EMR noteb
 
 ## Known bugs
 
-- nested list not always flattened: ```('accent', [['s3://pyspark-test-vlad/vocab.enron.txt', 's3://pyspark-test-vlad/vocab.kos.txt'], 's3://pyspark-test-vlad/vocab.nips.txt', 's3://pyspark-test-vlad/vocab.nytimes.txt', 's3://pyspark-test-vlad/vocab.pubmed.txt'])```
+- nested list not always flattened: ```('accent', [['s3://pyspark-test-vlad/vocab.enron.txt', 's3://pyspark-test-vlad/vocab.kos.txt'], 's3://pyspark-test-vlad/vocab.nips.txt', 's3://pyspark-test-vlad/vocab.nytimes.txt', 's3://pyspark-test-vlad/vocab.pubmed.txt'])``` --> dirty hack: repeat flatten operation for 3x times.
 
-# Deployment
+## Deployment
 
-## 1st version: Terraform + AWS EMR
+### 1st version: Terraform + AWS EMR
 
 Wrote by myself except 1 module (IAM)
 
@@ -85,33 +145,8 @@ What does terraform create?
 
 variables.tfvars - replace vars
 
-## 2nd version: Docker
+### 2nd version: Docker
 
 - ```docker build -t pyspark --build-arg PYTHON_VERSION=3.8 --build-arg IMAGE=buster .```
 - ```docker run -it pyspark```
 
-# Testing strategies
-
-Integration:
-- minio instead of s3
-- moto
-
-# Not done
-
-- scheduling + reindexing
-- not a Lambda function
-- ID instead of words
-- didn't rename files
-
-
-# Next steps:
-2. add context and session for Spark
-3. Test it on EMR
-6. Our deployment: manual creation of notebooks -> deploy EMR etc. with Terraform and test if you can create notebooks in the console
-7. Document all of this
-8. Also document:
-    - Dockerfile, mount directory, test if works
-    - moto. I think, that should be possible. Potential complexity: use moto from a Docker container
-8. Document Redis, hashmap, search, ordered sets; also describe that sets etc. could also be used in this strategy
-9. Refactor code
-10. Write a couple of cases with `Pytest`
