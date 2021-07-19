@@ -42,6 +42,8 @@ My compromises (reason for all of them - __time shortage__):
 - Nice to have:
     - Scheduling and reindexing is missing
     - no automated tests written. If I would have tested my solution, I would have done it with `pytest` for unit and integration tests. `moto` could be used for mocking `AWS` services. `pytest` and `moto` integrate seemlessly. Also `minio` could be used as a local S3-API-compatible object storage for integration testing.
+    - Also no linters, `black`, `pre-commit`, `makefile` and other development tools that I usually use, were used in this project so far.
+    - The code needs to be fine-tuned in terms of productivity - I didn't really leverage power of parallelization of `Spark` (e.g. usage of multiple nodes and partitioning to avoid shuffling).
 
 What did I focus on:
 - scalability of solution --> `PySpark` as technology of choice
@@ -56,9 +58,30 @@ What did I focus on:
 
 ## Overall logic of the solution
 
-### Current implementation: distributed computing framework
+### __Current implementation: distributed computing framework__
 
-### Possible implementation: leverage bitmaps
+To calculate the inverted index, I decided to use distributed computation framework like `Spark` (actually its `Python` implementation - `pyspark`). Motivation behing this decision:
+1. It scales: you can add new nodes to the cluster and partition your data, which would make sense in our case, since we are working with words, and they can be easily divided into groups by starting letters.
+2. `Spark` seemlessly integrates with `AWS S3` as data source.
+
+Algorithm:
+- read the contents of files in a certain directory (done);
+- partition data between diff. nodes (not done);
+- replace each word with a unique ID. How this can be done: as I described in a diff. section above, it IDs can be positions of words in a sorted set. (not done);
+- create separate tuple (in a `Spark` RDD) / row (in `SparkSQL`) / other data entity for each word (done);
+- merge tuples / rows / other data entitities, where words are equal - `reduce by key` operation from functional programming (done).
+
+### __Possible implementation: leverage bitmaps__
+I thought of another possible implementation, which could leverage power of such data structure as bitmaps.
+
+_What is a bitmap?_: A bitmap is an array of bits, that is, an array of the form: _[1, 0, 0, 1, 1]_. This data structure is very memory efficient and has a computational search complexity of O(1), and is often used in various search scenarios. For example, if we have users with a numeric ID and we want to store some binary data about the user (say, his willingness to subscribe to a mailing list), then a bitmap is an ideal candidate for implementation.
+
+Algorithm:
+- We could give numeric IDs to words in the same way that I described above: by adding words to a sorted set and getting their positions.
+- Then we create a bitmap for each file from our object storage, and each word presenting in a file gets a `1` on its position
+- `Redis` can be used to store the bitmaps. This article might be useful in the future: https://sudonull.com/post/97275-Fast-catalog-filter-for-online-stores-based-on-Redis-bitmaps
+
+__Note__: _this solution was not implemented and tested - for now it's just a theoretical construct._
 
 -----------------------------------------------------------------------
 
@@ -84,6 +107,8 @@ Strategy pattern
 How to connect to S3 from local? So that it also works from Docker and EMR notebook? --> boto not needed. Bucket needs to made public
 
 ## Results:
+
+This is the current output of the `pyspark` application:
 
 ```
 ('eyebrow', ['vocab.nytimes.txt', 'vocab.enron.txt'])
@@ -120,33 +145,53 @@ How to connect to S3 from local? So that it also works from Docker and EMR noteb
 
 ## Known bugs
 
-- nested list not always flattened: ```('accent', [['s3://pyspark-test-vlad/vocab.enron.txt', 's3://pyspark-test-vlad/vocab.kos.txt'], 's3://pyspark-test-vlad/vocab.nips.txt', 's3://pyspark-test-vlad/vocab.nytimes.txt', 's3://pyspark-test-vlad/vocab.pubmed.txt'])``` --> dirty hack: repeat flatten operation for 3x times.
+- `flatten()` doesn't flatten a deeply nested list correctly. Example of a nested list after flattening: ```('accent', [['s3://pyspark-test-vlad/vocab.enron.txt', 's3://pyspark-test-vlad/vocab.kos.txt'], 's3://pyspark-test-vlad/vocab.nips.txt', 's3://pyspark-test-vlad/vocab.nytimes.txt', 's3://pyspark-test-vlad/vocab.pubmed.txt'])``` --> quick fix: repeat flatten operation for 3x times.
+
+-----------------------------------------------------------------------
 
 ## Deployment
 
-### 1st version: Terraform + AWS EMR
+### __1st version: Terraform + AWS EMR__
 
-Wrote by myself except 1 module (IAM)
+I chose `Terraform` as IaaC technology. With its help I create infrastructure needed for setup of an `AWS EMR` cluster. All the `terraform` code was written by me, except 1 module (`iam`) - reference can be found in the respective `main.tf` file.
 
-Cluster works, but:
-1. can't submit pyspark job, and didn't want to waste time - shouldn't be perfect.
-2. Also create notebooks (I know that Jupyter Notebook is bad for the described task of indexing, and regular automated reindexing, but for quick demo would be OK) is not possible in Terraform.
-3. Jupyter Entreprise Gateway should be there to create notebooks manually
-4. Bootstrapping can't start:
-- https://stackoverflow.com/questions/62983941/install-boto3-aws-emr-failed-attempting-to-download-bootstrap-action
-- https://forums.aws.amazon.com/thread.jspa?threadID=164769
+__Resources created by the `terraform` code:__
+- `Amazon EMR` cluster, that `pyspark` applications can be submitted to.
+- `IAM` roles needed for `Amazon EMR` permissions to AWS services and resources. Each cluster in `Amazon EMR` must have a service role and a role for the `Amazon EC2` instance profile.
+- a default subnet, needed for creation of `Jupyter` notebooks.
+- 3 `S3` buckets: for storage of source data (lists of words), logs and application scripts.
+- `EC2` key pair, needed for SSH access to the cluster.
 
-What does terraform create?
+__How to run the `pyspark` app on the cluster created with `terraform`?__
+- Due to reasons described below it is not possible to run `pyspark` applications on the created cluster. That's why the application should be deployed in a `Docker` container - check the "_2nd version: Docker_" section below.
 
-- ```cd terraform\deployment\emr_based```
-- ```terraform plan -out="../../tfplan" -var-file="variables.tfvars"```
-- ```terraform apply -var-file="variables.tfvars"```
-- ```aws-vault exec nc-account -- terraform destroy -var-file="variables.tfvars"```
+__Why the cluster solution didn't work out?__
+1. Integration efforts. Mechanisms of submission of `pyspark` apps are not straightforward, and due to time shortage I couldn't fix all the issues.
+2. What app submission options do exist at all?
+    - automatically submit the location of app script on `S3` via `spark-submit` CLI app and `step` mechanism of `Amazon EMR`
+    - work in an interactive notebook (`Jupyter Notebook`). This solution is bad for the described task of indexing, and regular automated reindexing, but for a quick demo would be OK
+    - SSH into the cluster and submit the code manually
+3. Issues that I had:
+    - Creating notebooks is not possible in `terraform` - only in the web console;
+    - but also this is not so easy - you need to install `Jupyter Entreprise Gateway` first;
+    - Bootstrapping action (download app script from `S3`) didn't succeed - probably because of denied access to `S3` bucket. Resources that might help: https://stackoverflow.com/questions/62983941/install-boto3-aws-emr-failed-attempting-to-download-bootstrap-action and https://forums.aws.amazon.com/thread.jspa?threadID=164769
 
-variables.tfvars - replace vars
+__Note: you still can deploy the `terraform` code - it will create a working `AWS EMR` cluster and all the needed resources like IAM roles and buckets. What is not working, is possibility to submit `pyspark` apps, which makes the cluster practically useless.__
 
-### 2nd version: Docker
+__How to deploy the `terraform` code?__
+- In the `terraform\deployment\emr_based\variables.tfvars` file replace variables `aws_profile`, `aws_region` and `role_arn` with yours.
+- Go to the correct directory: ```cd terraform\deployment\emr_based```
+- initialize `terraform` there: ```terraform init```
+- (optional) create a plan: ```terraform plan -out="../../tfplan" -var-file="variables.tfvars"```
+- apply the code to your AWS account: ```terraform apply -var-file="variables.tfvars"```
+- !!!!!!! Don't forget to destroy the deployed infrastructure - `Amazon EMR` is really expensive !!!!!!! ```terraform destroy -var-file="variables.tfvars"```
+- If you have multi-factor authentication, then you can execute `terraform` commands by combining them with `aws-vault`. Example of the destroy command: ```aws-vault exec nc-account -- terraform destroy -var-file="variables.tfvars"```
 
-- ```docker build -t pyspark --build-arg PYTHON_VERSION=3.8 --build-arg IMAGE=buster .```
-- ```docker run -it pyspark```
+### __2nd version: Docker__
+
+This deployment option only needs `Docker` to be installed on your machine.
+
+1. Build the container image: ```docker build -t pyspark --build-arg PYTHON_VERSION=3.8 --build-arg IMAGE=buster .```
+2. Start the container ```docker run -it pyspark```
+3. The `pyspark` application will start automatically, and you can see the output in your terminal. Note: adjust configuration of your terminal, so that you can see more line - the output is very long (tens of thousands of lines).
 

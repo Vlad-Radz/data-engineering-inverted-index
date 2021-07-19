@@ -24,7 +24,7 @@ resource "aws_iam_role_policy_attachment" "emr_service_role" {
   policy_arn = "arn:aws:iam::aws:policy/service-role/AmazonElasticMapReduceRole"
 }
 
-# IAM role for autoscaling
+# IAM role for autoscaling - not used yet
 data "aws_iam_policy_document" "emr_autoscaling_role_policy" {
   statement {
     effect = "Allow"
