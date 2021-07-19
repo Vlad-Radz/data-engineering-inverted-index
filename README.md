@@ -96,15 +96,14 @@ Right now the dependencies management is not needed, because the only dependecy 
 
 ## Code design
 
-facades for systems like Spark, Redis + bitmaps
+What can be improved:
+- no logging right now
+- no uniform formatting
+- poor code organization - division into classes could be far better.
 
-in ABC there is always storage and transformation logic
-
-Strategy pattern
-- https://refactoring.guru/design-patterns/strategy
-- https://stackoverflow.com/questions/616796/what-is-the-difference-between-factory-and-strategy-patterns
-
-How to connect to S3 from local? So that it also works from Docker and EMR notebook? --> boto not needed. Bucket needs to made public
+Design considerations for the future:
+- facades for systems like Spark, Redis
+- abstract factory pattern for boundles of EMR + S3 etc.
 
 ## Results:
 
