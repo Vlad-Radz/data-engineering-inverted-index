@@ -2,6 +2,8 @@
 **/terraform.tfstate.*.backup
 **/.terraform/*
 **/tfplan
-.tfstate files.
 *.tfstate.
 *.tfstate.*.
+*.terraform.lock.hcl
+*terraform.tfstate.backup
+*terraform.tfstate

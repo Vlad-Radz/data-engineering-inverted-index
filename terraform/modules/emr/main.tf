@@ -42,10 +42,12 @@ resource "aws_emr_cluster" "emr-spark-cluster" {
 
   service_role     = "${var.emr_service_role}"
 
+  /*
   bootstrap_action {
     name = "Bootstrap setup."
     path = "s3://${var.bucket_scripts_name}/scripts/bootstrap_actions.sh"
   }
+  */
 
   step {
       name              = "Calculate inverted index"
