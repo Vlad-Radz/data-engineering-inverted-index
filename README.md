@@ -194,3 +194,60 @@ This deployment option only needs `Docker` to be installed on your machine.
 2. Start the container ```docker run -it pyspark```
 3. The `pyspark` application will start automatically, and you can see the output in your terminal. Note: adjust configuration of your terminal, so that you can see more line - the output is very long (tens of thousands of lines).
 
+### __3rd version: EMR on EKS__
+
+It's a combination of using both `EMR` and containers. Motivation:
+- _Why use `EMR`_? When you self-manage `Apache Spark` on `EKS`, you need to manually install, manage, and optimize `Apache Spark` to run on `Kubernetes`. When you use `EMR`, you don't need to do a lot of setup; automated provisioning, scaling, faster runtimes.
+- _Why use `EKS`_? Consolidate analytical workloads with other apps on the same `EKS` cluster; improve resource utilization and simplify infra management; centralized monitoring. Example: Netflix backend, where actual microservices and big data processing are in the same infra.
+- `EKS` vs `ECS` vs `Fargate`:
+    - you can run both `EKS` and `ECS` on `Fargate` - you give up some configurability and advanced features.
+    - `ECS` is orchestration solution from `AWS`.
+
+Config:
+- uses `ConfigMap` feature of `Kubernetes`, to store EMR on EKS service-linked role as env var.
+- "IAM Roles for Service account" should be enabled. Service account - when a service uses an IAM User (AWS Access key and Secret); to not store permissions in the code --> best practices: https://docs.aws.amazon.com/general/latest/gr/aws-access-keys-best-practices.html#iam-user-access-keys
+
+Various:
+- A virtual cluster is an EMR concept which means that EMR service is registered to `Kubernetes` namespace and it can run jobs in that namespace.
+- AWS's load balancers can be used with `EKS`:
+    - Network Load Balancer (level 4 of OSI): to load balance traffic between pods on EC2 instances.
+    - Application Load Balancer (level 7 of OSI)
+- encryption of Kubernetes secrets: 1) Kubernetes stores all secret object data within etcd and all etcd volumes used by Amazon EKS are encrypted at the disk-level using AWS-managed encryption keys. 2) further encrypt Kubernetes secrets with KMS keys.
+- `StatefulSet` from `K8s` -> `EBS Container Storage Interface` on AWS
+
+Storage:
+- As you submit a Spark application (or as you request new executors during dynamic allocation), `PersistentVolumeClaims` are dynamically created in Kubernetes, which will automatically provision new `PersistentVolumes` of the Storage Classes you have requested
+
+Todos:
+- What should be included into Terraform code base?
+    - CMK for the EKS cluster to use when encrypting your K8s secrets inside of K8s
+    - Check the YAML for config of cluster: https://www.eksworkshop.com/030_eksctl/launcheks/ or here - how to add an additional nodegroup: https://www.eksworkshop.com/advanced/430_emr_on_eks/prereqs/
+- How to deploy EMR on EKS with Terraform?
+    - create EKS cluster
+    - create a role that EMR jobs will assume when they run on EKS, also trust policy: https://www.eksworkshop.com/advanced/430_emr_on_eks/prereqs/
+    - create virtual cluster (EMR): same link: https://www.eksworkshop.com/advanced/430_emr_on_eks/prereqs/
+    - PROBLEM: you can't do that on terraform - it's just a handy CLI tool (maybe an API)
+        - --> you need Helm for deployment of apps (it downloads a zip file, which consists of several specific files and folders - this format is called "chart"), which is like `yum` or `pip`; you may use Ansible for configuration. Both: https://www.linkedin.com/pulse/helm-ansible-basics-deployment-arun-n-prince2-itil-aws-/
+        - deploy with kubectl: https://learnk8s.io/terraform-eks#testing-the-cluster-by-deploying-a-simple-hello-world-app
+- You can also deploy Spark on K8s using `spark-submit` - so instead of deploying Driver and Executors in diff. pods by ourselves, we rely on Spark to do that (officially supporting K8s as cluster manager).
+- __ALTERNATIVE__: `SparkOperator` from K8s.
+    - To do (source: https://www.datamechanics.co/blog-post/setting-up-managing-monitoring-spark-on-kubernetes):
+        1. Create a Kubernetes cluster
+        2. Define your desired node pools based on your workloads requirements
+        3. Tighten security based on your networking requirements (we recommend making the Kubernetes cluster private)
+        4. Create a docker registry for your Spark docker images - and start building your own images
+        5. Install the Spark-operator
+        6. Install the Kubernetes cluster autoscaler
+        7. Setup the collection of Spark driver logs and Spark event logs to a persistent storage
+        8. Install the Spark history server (Helm Chart)
+        9. Setup the collection of node and Spark metrics (CPU, Memory, I/O, Disks)
+    - Why use? -> Spark application configs are writting in one place through a YAML file (along with configmaps, volumes, etc.). A lot easier than `spark-submit`.
+    - Guides / examples:
+        - https://dzlab.github.io/ml/2020/07/14/spark-kubernetes
+        - https://dzlab.github.io/ml/2020/07/15/spark-kubernetes-2/
+        - https://dev.to/stack-labs/my-journey-with-spark-on-kubernetes-in-python-1-3-4nl3
+- NEXT STEPS:
+    - Do the tutorial: https://aws.amazon.com/blogs/startups/from-zero-to-eks-with-terraform-and-helm/
+    - Write own terraform code
+    - Do tutorials about deploying pyspark with SparkOperator of K8s
+    - continue working on this K8s guide: https://www.eksworkshop.com/030_eksctl/launcheks/
