@@ -183,6 +183,8 @@ __How to deploy the `terraform` code?__
 - initialize `terraform` there: ```terraform init```
 - (optional) create a plan: ```terraform plan -out="../../tfplan" -var-file="variables.tfvars"```
 - apply the code to your AWS account: ```terraform apply -var-file="variables.tfvars"```
+- refresh (in case you added output not existed before): ```terraform refresh -var-file="variables.tfvars"```
+- write variable from output (which is stored in the state file) to a custom file: ```terraform output kubeconfig > ../../../.kube/config```
 - !!!!!!! Don't forget to destroy the deployed infrastructure - `Amazon EMR` is really expensive !!!!!!! ```terraform destroy -var-file="variables.tfvars"```
 - If you have multi-factor authentication, then you can execute `terraform` commands by combining them with `aws-vault`. Example of the destroy command: ```aws-vault exec nc-account -- terraform destroy -var-file="variables.tfvars"```
 
@@ -220,7 +222,6 @@ Storage:
 
 Todos:
 - What should be included into Terraform code base?
-    - CMK for the EKS cluster to use when encrypting your K8s secrets inside of K8s
     - Check the YAML for config of cluster: https://www.eksworkshop.com/030_eksctl/launcheks/ or here - how to add an additional nodegroup: https://www.eksworkshop.com/advanced/430_emr_on_eks/prereqs/
 - How to deploy EMR on EKS with Terraform?
     - create EKS cluster
@@ -228,6 +229,7 @@ Todos:
     - create virtual cluster (EMR): same link: https://www.eksworkshop.com/advanced/430_emr_on_eks/prereqs/
     - PROBLEM: you can't do that on terraform - it's just a handy CLI tool (maybe an API)
         - --> you need Helm for deployment of apps (it downloads a zip file, which consists of several specific files and folders - this format is called "chart"), which is like `yum` or `pip`; you may use Ansible for configuration. Both: https://www.linkedin.com/pulse/helm-ansible-basics-deployment-arun-n-prince2-itil-aws-/
+        - or you can actually use that tool from AWS, why not?
         - deploy with kubectl: https://learnk8s.io/terraform-eks#testing-the-cluster-by-deploying-a-simple-hello-world-app
 - You can also deploy Spark on K8s using `spark-submit` - so instead of deploying Driver and Executors in diff. pods by ourselves, we rely on Spark to do that (officially supporting K8s as cluster manager).
 - __ALTERNATIVE__: `SparkOperator` from K8s.
@@ -246,8 +248,26 @@ Todos:
         - https://dzlab.github.io/ml/2020/07/14/spark-kubernetes
         - https://dzlab.github.io/ml/2020/07/15/spark-kubernetes-2/
         - https://dev.to/stack-labs/my-journey-with-spark-on-kubernetes-in-python-1-3-4nl3
-- NEXT STEPS:
-    - Do the tutorial: https://aws.amazon.com/blogs/startups/from-zero-to-eks-with-terraform-and-helm/
-    - Write own terraform code
-    - Do tutorials about deploying pyspark with SparkOperator of K8s
-    - continue working on this K8s guide: https://www.eksworkshop.com/030_eksctl/launcheks/
+
+__Deploying to EKS using terraform & Helm__:
+- Preparation
+    - `kubectl` CLI should be installed
+    - deploy EKS cluster and nodes from `terraform/deployment/eks_based` using same commands, as in case with EMR (see above).
+    - prepare config files for Kubernetes: ```terraform output kubeconfig > ../../../.kube/config```, ```terraform output config_map_aws_auth  > ../../../.kube/configmap.yml```.
+    - change directory to root of the repo: `cd ../../../`
+    - Installing `aws-iam-authenticator`: https://docs.aws.amazon.com/eks/latest/userguide/install-aws-iam-authenticator.html
+    - Tell `kubectl` to use correct config file, via env var. Windows: ```set KUBECONFIG=".kube/config"```. Linux: ```export KUBECONFIG=".kube/config"```. If not done that, then you would need to add ```--kubeconfig .kube/config``` to every `kubectl` command - but then `helm` would not connect to the right cluster.
+    - Apply the configmap (env vars): ```aws-vault exec nc-account -- kubectl apply -f .kube/configmap.yml```. Expected response: `configmap/aws-auth configured`.
+    - Check the configmap: ```aws-vault exec nc-account -- kubectl describe configmap -n kube-system aws-auth```
+    - Check: you should see your nodes from your autoscaling group either starting to join or joined to the cluster. Once the second column reads Ready the node can have deployments pushed to it: ```aws-vault exec nc-account -- kubectl get nodes -o wide```
+    - `<not needed anymore>` Install `Tiller`, which is server portion of `Helm`: ```aws-vault exec nc-account -- kubectl apply -f .kube/tiller-user.yaml```. Deploy `Tiller` in a namespace, restricted to deploying resources only in that namespace (namespace is in the yaml file).
+        - Explanation: a `service account` in K8s provides an identity for processes that run in a Pod. Granting roles to a user or an application-specific service account is a best practice to ensure that your application is operating in the scope that you have specified. So with the `tiller-user.yaml` we create the service account and role binding.
+        - The command ```helm init --service-account tiller``` is not needed anymore, since `init` was removed, because its functionality is automated now. And also Helm install/set-up is simplified: Helm client (helm binary) only (no Tiller). https://helm.sh/docs/topics/v2_v3_migration/ So `.kube/tiller-user.yaml` theoretically not needed anymore?
+    - Install NGINX so that our deployment can communicate with the outside world. The ingress controller for NGINX uses ConfigMap to store NGINX configurations. ```helm repo add nginx https://helm.nginx.com/stable```, ```aws-vault exec nc-account -- helm install --set rbac.create=true my-nginx nginx/nginx-ingress --version 0.10.0```
+
+__NEXT STEPS__:
+    - automate deployment of EKS & setting up the cluster with kubectl & all others. Makefile for the beginning is OK.
+    - Do the tutorial: https://aws.amazon.com/blogs/startups/from-zero-to-eks-with-terraform-and-helm/ ---> they don't show documentation of config for Airflow, so I will try directly with Spark --> check the links above for the reference (about Spark operator etc.)
+    - EMR: how to deploy outside of Cloud9? Go through tutorial again, and replicate the steps here locally.
+    - continue working on this K8s guide: https://www.eksworkshop.com/ , especially: https://www.eksworkshop.com/intermediate/230_logging/
+    - course about containers
