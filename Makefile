@@ -1,4 +1,4 @@
-# TODO: what is the best practice 
+# Good tutorial: https://makefiletutorial.com/
 
 .PHONY: help install install-dev clean clean-pyc clean-build clean-pyenv lint test test-dbg develop mypy isort isort-check
 
@@ -9,7 +9,7 @@ tf_base:
 	aws-vault exec nc-account -- terraform apply -var-file="variables.tfvars"
 
 change_dir_emr:
-	cd terraform/deployment/emr_based
+	cd terraform/deployment/emr_based  # TODO: this doesn't work yet! Should be checke, how to write `cd` commands
 
 change_dir_eks:
 	cd terraform/deployment/eks_based
@@ -17,11 +17,10 @@ change_dir_eks:
 tf_setup_emr: change_dir_emr tf_base
 
 tf_setup_eks: change_dir_eks tf_base
-	aws-vault exec nc-account -- terraform output kubeconfig > ../../../.kube/config
-	aws-vault exec nc-account -- terraform output config_map_aws_auth  > ../../../.kube/configmap.yml
+	terraform output kubeconfig > ../../../.kube/config
+	terraform output config_map_aws_auth  > ../../../.kube/configmap.yml
 
-enable_k8s:
-	tf_setup_eks
+enable_k8s: tf_setup_eks
 	cd ../../../
 	set KUBECONFIG=".kube/config"
 	aws-vault exec nc-account -- kubectl apply -f .kube/configmap.yml

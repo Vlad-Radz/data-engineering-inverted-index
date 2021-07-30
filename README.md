@@ -216,6 +216,7 @@ Various:
     - Application Load Balancer (level 7 of OSI)
 - encryption of Kubernetes secrets: 1) Kubernetes stores all secret object data within etcd and all etcd volumes used by Amazon EKS are encrypted at the disk-level using AWS-managed encryption keys. 2) further encrypt Kubernetes secrets with KMS keys.
 - `StatefulSet` from `K8s` -> `EBS Container Storage Interface` on AWS
+- By design, nodegroups are immutable. This means that if you need to change something (other than scaling) like the AMI or the instance type of a nodegroup, you would need to create a new nodegroup with the desired changes, move the load and delete the old one.
 
 Storage:
 - As you submit a Spark application (or as you request new executors during dynamic allocation), `PersistentVolumeClaims` are dynamically created in Kubernetes, which will automatically provision new `PersistentVolumes` of the Storage Classes you have requested
@@ -265,8 +266,66 @@ __Deploying to EKS using terraform & Helm__:
         - The command ```helm init --service-account tiller``` is not needed anymore, since `init` was removed, because its functionality is automated now. And also Helm install/set-up is simplified: Helm client (helm binary) only (no Tiller). https://helm.sh/docs/topics/v2_v3_migration/ So `.kube/tiller-user.yaml` theoretically not needed anymore?
     - Install NGINX so that our deployment can communicate with the outside world. The ingress controller for NGINX uses ConfigMap to store NGINX configurations. ```helm repo add nginx https://helm.nginx.com/stable```, ```aws-vault exec nc-account -- helm install --set rbac.create=true my-nginx nginx/nginx-ingress --version 0.10.0```
 
+__Deploying to EKS using terraform & eksctl__:
+- From `eksctl` version 0.40.0 users can run `eksctl` commands against clusters which were not created by `eksctl`. But: name should comply with the guidelines mentioned here: https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/cfn-using-console-create-stack-parameters.html
+- Steps:
+    - set up EKS cluster as described above (using `terraform` & `kubectl`)
+    - ```aws-vault exec nc-account -- kubectl create namespace spark```
+    - use the automation powered by eksctl for creating RBAC permissions and for adding EMR on EKS service-linked role into aws-auth configmap: ```aws-vault exec nc-account -- eksctl create iamidentitymapping --cluster pysparkdemo --namespace spark --service-name "emr-containers" --region=eu-west-1```
+    - Enable IAM Roles for Service Account (IRSA) (so that pods can connect to AWS services): ```aws-vault exec nc-account -- eksctl utils associate-iam-oidc-provider --cluster pysparkdemo --approve --region=eu-west-1```
+    - create the role that EMR will use for job execution. This is the role, EMR jobs will assume when they run on EKS:
+    ```
+    cat <<EoF > ./documents/emr-trust-policy.json
+    {
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+        "Effect": "Allow",
+        "Principal": {
+            "Service": "elasticmapreduce.amazonaws.com"
+        },
+        "Action": "sts:AssumeRole"
+        }
+    ]
+    }
+    EoF
+    ```
+    - attach the required IAM policies to the role so it can write logs to s3 and cloudwatch:
+    ```
+    cat <<EoF > ./documents/EMRContainers-JobExecutionRole.json
+    {
+        "Version": "2012-10-17",
+        "Statement": [
+            {
+                "Effect": "Allow",
+                "Action": [
+                    "s3:PutObject",
+                    "s3:GetObject",
+                    "s3:ListBucket"
+                ],
+                "Resource": "*"
+            },
+            {
+                "Effect": "Allow",
+                "Action": [
+                    "logs:PutLogEvents",
+                    "logs:CreateLogStream",
+                    "logs:DescribeLogGroups",
+                    "logs:DescribeLogStreams"
+                ],
+                "Resource": [
+                    "arn:aws:logs:*:*:*"
+                ]
+            }
+        ]
+    }  
+    EoF
+    ```
+    - update the trust relationship between IAM role we just created with EMR service identity: ```aws-vault exec nc-account -- aws emr-containers update-role-trust-policy --cluster-name pysparkdemo --namespace spark --role-name EMRContainers-JobExecutionRole --region=eu-west-1```
+    - Register EKS cluster with EMR - create a "virtual cluster" (means that EMR service is registered to Kubernetes namespace and it can run jobs in that namespace): ```aws-vault exec nc-account -- aws emr-containers create-virtual-cluster --name pysparkdemo --container-provider type="EKS",id="pysparkdemo",info={eksInfo={namespace="spark"}} --region=eu-west-1```
+    - create bucket to upload sample scripts and logs: ```aws-vault exec nc-account -- aws s3 mb s3://emr-eks-demo-pyspark-192799248640-eu-west-1 ```
+
 __NEXT STEPS__:
-    - automate deployment of EKS & setting up the cluster with kubectl & all others. Makefile for the beginning is OK.
     - Do the tutorial: https://aws.amazon.com/blogs/startups/from-zero-to-eks-with-terraform-and-helm/ ---> they don't show documentation of config for Airflow, so I will try directly with Spark --> check the links above for the reference (about Spark operator etc.)
     - EMR: how to deploy outside of Cloud9? Go through tutorial again, and replicate the steps here locally.
     - continue working on this K8s guide: https://www.eksworkshop.com/ , especially: https://www.eksworkshop.com/intermediate/230_logging/
